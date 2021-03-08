@@ -1,0 +1,19 @@
+[package]
+name = "frag"
+version = "0.1.0"
+authors = ["Cody Bloemhard <cblmhrd@live.nl>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "frag"
+path = "src/lib.rs"
+
+[[bin]]
+name = "testbin"
+path = "src/bin.rs"
+
+[dependencies]
+sdl2 = "0.34.3"
+gl = "0.14.0"
