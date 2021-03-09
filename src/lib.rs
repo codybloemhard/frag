@@ -4,25 +4,25 @@ use std::time::Duration;
 use std::time::Instant;
 use std::ffi::{CStr, CString};
 
-pub fn run(cw: i32, ch: i32, ww: u32, wh: u32, sleep: u32){
+pub fn run(cw: i32, ch: i32, ww: u32, wh: u32, sleep: u32) {
     if cw <= 0 || ch <= 0 { panic!("cw or ch (canvas width or height) <= 0"); }
 
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
+    let sdl_context = sdl2::init().expect("Frag: could not create SDL context.");
+    let video_subsystem = sdl_context.video().expect("Frag: could not get SDL video subsystem.");
 
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(4, 5);
 
     let window = video_subsystem.window(":3", ww, wh)
-        .position_centered().opengl().build().unwrap();
+        .position_centered().opengl().build().expect("Frag: could not create window.");
 
-    let _gl_contex = window.gl_create_context().unwrap(); //needs to exist
+    let _gl_contex = window.gl_create_context().expect("Frag: could not create GL context."); //needs to exist
     #[allow(dead_code)]
     let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
 
     unsafe{
-        gl::Viewport(0, 0, cw, ch);
+        gl::Viewport(0, 0, ww as i32, wh as i32);
         gl::ClearColor(0.3, 0.3, 0.5, 1.0);
     }
 
@@ -30,34 +30,39 @@ pub fn run(cw: i32, ch: i32, ww: u32, wh: u32, sleep: u32){
     "
     #version 330 core
     layout (location = 0) in vec3 Position;
+    out vec2 uv;
     void main()
     {
+        uv = Position.xy * 0.5;
+        uv.x *= 16./9.;
         gl_Position = vec4(Position, 1.0);
     }";
 
-    let vert_shader = Shader::from_vert_source(&CString::new(vert_source).unwrap()).unwrap();
+    let vert_shader = Shader::from_vert_source(&CString::new(vert_source).expect("Frag: could not create vertex c string."))
+        .expect("Frag: could not create vertex shader.");
 
     let frag_source =
     "
     #version 330 core
+    in vec2 uv;
     out vec4 Color;
     void main()
     {
-        Color = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+        Color = vec4(1.0f, 0.5f, 0.2f, 1.0f) * smoothstep(0.5, 0.5-0.001, length(uv - vec2(0.0)));
     }";
-    let frag_shader = Shader::from_frag_source(&CString::new(frag_source).unwrap()).unwrap();
+    let frag_shader = Shader::from_frag_source(&CString::new(frag_source).expect("Frag: could not create fragment c string."))
+        .expect("Frag: could not create fragment shader.");
 
-    let shader_program = Program::from_shaders(&[vert_shader, frag_shader]).unwrap();
+    let shader_program = Program::from_shaders(&[vert_shader, frag_shader]).expect("Frag: could not create shader program.");
     shader_program.set_used();
 
-    let vertices: Vec<f32> = vec![-0.5, -0.5, 0.0, 0.5, -0.5, 0.0, 0.0, 0.5, 0.0];
+    let vertices: Vec<f32> = vec![-1., -1., 0., -1., 1., 0., 1., 1., 0., -1., -1., 0., 1., 1., 0., 1., -1., 0.];
 
     let mut vbo: gl::types::GLuint = 0;
-    unsafe {
-        gl::GenBuffers(1, &mut vbo);
-    }
+    let mut vao: gl::types::GLuint = 0;
 
     unsafe {
+        gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
             gl::ARRAY_BUFFER,                                                       // target
@@ -66,16 +71,7 @@ pub fn run(cw: i32, ch: i32, ww: u32, wh: u32, sleep: u32){
             gl::STATIC_DRAW,                               // usage
         );
         gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-    }
-
-    // set up vertex array object
-
-    let mut vao: gl::types::GLuint = 0;
-    unsafe {
         gl::GenVertexArrays(1, &mut vao);
-    }
-
-    unsafe {
         gl::BindVertexArray(vao);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::EnableVertexAttribArray(0); // this is "layout (location = 0)" in vertex shader
@@ -97,18 +93,14 @@ pub fn run(cw: i32, ch: i32, ww: u32, wh: u32, sleep: u32){
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. }
-                    => { break 'running },
+                    => { break 'running  },
                 _ => {}
             }
         }
         unsafe{
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::BindVertexArray(vao);
-            gl::DrawArrays(
-                gl::TRIANGLES, // mode
-                0,             // starting index in the enabled arrays
-                3,             // number of indices to be rendered
-            );
+            gl::DrawArrays(gl::TRIANGLES, 0, 6);
         }
         window.gl_swap_window();
         let t = start.elapsed().as_millis() as f32 / 1000.0;
