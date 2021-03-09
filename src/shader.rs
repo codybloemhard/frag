@@ -1,4 +1,6 @@
 use std::ffi::{CStr, CString};
+use std::fs::File;
+use std::io::Read;
 
 pub const RENDER_VERT_SRC: &str = "
 #version 450 core
@@ -14,7 +16,7 @@ void main()
     gl_Position = vec4(Position, 1.0);
 }";
 
-pub const RENDER_FRAG_SRC: &str ="
+pub const RENDER_FRAG_HEADER: &str = "
 #version 450 core
 in vec2 uv;
 uniform float iTime;
@@ -22,12 +24,15 @@ uniform float iAspect;
 uniform vec2 iResolution;
 
 out vec4 color;
+";
 
+pub const RENDER_FRAG_STD_BODY: &str = "
 void main()
 {
     float rad = 0.4 + (sin(iTime) * 0.5 + 0.5) * 0.1;
     color = vec4(1.0f, 0.5f, 0.2f, 1.0f) * smoothstep(rad, rad-0.001, length(uv - vec2(0.0)));
-}";
+}
+";
 
 pub const POST_VERT_SRC: &str = "
 #version 450 core
@@ -52,6 +57,45 @@ void main()
 {
     color = texture(tex, uv);
 }";
+
+pub struct ShaderBuilder{
+    segments: Vec<String>,
+}
+
+impl ShaderBuilder{
+    pub fn new() -> Self{
+        Self{
+            segments: vec![RENDER_FRAG_HEADER.to_string()],
+        }
+    }
+
+    pub fn test() -> Self{
+        Self::new().with_str(RENDER_FRAG_STD_BODY)
+    }
+
+    pub fn with_str(mut self, string: &str) -> Self{
+        self.segments.push(string.to_string());
+        self
+    }
+
+    pub fn with_file(self, file: &str) -> Self{
+        let mut file = File::open(file).unwrap_or_else(|e| panic!("{}", e));
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap_or_else(|e| panic!("{}", e));
+        self.with_str(&contents)
+    }
+
+    pub fn build(self) -> Result<Program, String>{
+        let concat = self.segments.into_iter().map(|s| s.chars().collect::<Vec<_>>()).flatten().collect::<String>();
+        Program::new(RENDER_VERT_SRC, &concat)
+    }
+}
+
+impl Default for ShaderBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 pub struct Program {
     id: gl::types::GLuint,

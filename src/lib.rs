@@ -2,11 +2,11 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::Instant;
 
-mod shader;
+pub mod shader;
 
 use crate::shader::*;
 
-pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool) {
+pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, builder: ShaderBuilder) {
     if cw <= 0 || ch <= 0 { panic!("cw or ch (canvas width or height) <= 0"); }
     if ww <= 0 || wh <= 0 { panic!("ww or wh (canvas width or height) <= 0"); }
 
@@ -23,8 +23,8 @@ pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool) {
     let _gl_contex = window.gl_create_context().expect("Frag: could not create GL context."); //needs to exist
     #[allow(dead_code)]
     let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
-    // build shaders
-    let render_program = Program::new(RENDER_VERT_SRC, RENDER_FRAG_SRC).expect("Frag: could not create render program.");
+    // build post vertex
+    let render_program = builder.build().unwrap_or_else(|e| panic!("{}", e));
     let post_program = Program::new(POST_VERT_SRC, POST_FRAG_SRC).expect("Frag: could not create post program.");
     // set initial uniforms
     render_program.set_used();
