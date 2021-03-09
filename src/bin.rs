@@ -7,5 +7,5 @@ fn main(){
     let ww = 1600;
     let wh = 900;
     println!("Henlo Frens!");
-    run(cw, ch, ww, wh);
+    run(cw, ch, ww, wh, true);
 }
