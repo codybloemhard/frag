@@ -8,7 +8,7 @@ fn main(){
     let wh = 900;
     println!("Henlo Frens!");
 
-    let builder = frag::shader::ShaderStreamer::new()
+    let builder = shader::ShaderStreamer::new()
         .with_file("lib.glsl")
         .with_file("shader.glsl");
     run(cw, ch, ww, wh, true, builder);
