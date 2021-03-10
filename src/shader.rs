@@ -1,6 +1,11 @@
-use std::ffi::{CStr, CString};
+use std::ffi::{ CStr, CString };
 use std::fs::File;
 use std::io::Read;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
+use hotwatch::{ Hotwatch, Event };
+
+static STREAM_FLAG: AtomicU32 = AtomicU32::new(0);
 
 pub const RENDER_VERT_SRC: &str = "
 #version 450 core
@@ -30,7 +35,7 @@ pub const RENDER_FRAG_STD_BODY: &str = "
 void main()
 {
     float rad = 0.4 + (sin(iTime) * 0.5 + 0.5) * 0.1;
-    color = vec4(1.0f, 0.5f, 0.2f, 1.0f) * smoothstep(rad, rad-0.001, length(uv - vec2(0.0)));
+    color = vec4(1.0f, 0.5f, 0.2f, 1.0f) * smoothstep(rad, rad-0.001, length(uv));
 }
 ";
 
@@ -58,14 +63,24 @@ void main()
     color = texture(tex, uv);
 }";
 
-pub struct ShaderBuilder{
-    segments: Vec<String>,
+enum StreamElement {
+    Static(String),
+    Streamed(String),
 }
 
-impl ShaderBuilder{
+pub struct ShaderStreamer{
+    segments: Vec<StreamElement>,
+    hotwatch: Hotwatch,
+    stream_cache: Vec<String>,
+}
+
+impl ShaderStreamer{
     pub fn new() -> Self{
+        let hotwatch = Hotwatch::new().expect("hotwatch failed to initialize!");
         Self{
-            segments: vec![RENDER_FRAG_HEADER.to_string()],
+            segments: vec![StreamElement::Static(RENDER_FRAG_HEADER.to_string())],
+            hotwatch,
+            stream_cache: Vec::new(),
         }
     }
 
@@ -74,24 +89,81 @@ impl ShaderBuilder{
     }
 
     pub fn with_str(mut self, string: &str) -> Self{
-        self.segments.push(string.to_string());
+        self.segments.push(StreamElement::Static(string.to_string()));
         self
     }
 
-    pub fn with_file(self, file: &str) -> Self{
-        let mut file = File::open(file).unwrap_or_else(|e| panic!("{}", e));
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap_or_else(|e| panic!("{}", e));
-        self.with_str(&contents)
+    pub fn with_file(mut self, file: &str) -> Self{
+        self.segments.push(StreamElement::Streamed(file.to_string()));
+        self.stream_cache.push(String::new());
+        self
     }
 
-    pub fn build(self) -> Result<Program, String>{
-        let concat = self.segments.into_iter().map(|s| s.chars().collect::<Vec<_>>()).flatten().collect::<String>();
+    fn read_file(file: &str) -> Result<String, String>{
+        let mut file = match File::open(file){
+            Ok(f) => f,
+            Err(e) => { return Err(format!("{}", e)); }
+        };
+        let mut contents = String::new();
+        if let Err(e) = file.read_to_string(&mut contents){
+            return Err(format!("{}", e));
+        }
+        Ok(contents)
+    }
+
+    pub fn start(&mut self){
+        let mut stream_count = 0u32;
+        for element in &self.segments{
+            if let StreamElement::Streamed(file) = element{
+                self.hotwatch.watch(&file, move |event: Event| {
+                    if let Event::Write(path) = event {
+                        println!("Frag: marked \"{:?}\" dirty.", path.to_str());
+                        let flag = 1u32 << stream_count;
+                        STREAM_FLAG.fetch_or(flag, Ordering::SeqCst);
+                    }
+                }).expect("failed to watch file!");
+                stream_count += 1;
+            }
+        }
+    }
+
+    pub fn is_dirty(&self) -> bool{
+        STREAM_FLAG.load(Ordering::SeqCst) > 0
+    }
+
+    pub fn build(&mut self, all: bool) -> Result<Program, String>{
+        let flag = STREAM_FLAG.load(Ordering::Relaxed);
+        if self.stream_cache.len() > 31 {
+            return Err("Can only support up to 31 streamed files.".to_string());
+        }
+        let mut concat = String::new();
+        let mut stream_count = 0;
+        for element in &self.segments{
+            match element{
+                StreamElement::Streamed(file) => {
+                    let bit = 1u32 << stream_count;
+                    if all || (bit & flag) > 0{
+                        let content = Self::read_file(&file)?;
+                        concat.push_str(&content);
+                        self.stream_cache[stream_count] = content;
+                        if !all {
+                            STREAM_FLAG.fetch_xor(bit, Ordering::SeqCst);
+                        }
+                    } else {
+                        concat.push_str(&self.stream_cache[stream_count]);
+                    }
+                    stream_count += 1;
+                },
+                StreamElement::Static(string) => {
+                    concat.push_str(&string);
+                },
+            }
+        }
         Program::new(RENDER_VERT_SRC, &concat)
     }
 }
 
-impl Default for ShaderBuilder {
+impl Default for ShaderStreamer{
     fn default() -> Self {
         Self::new()
     }
@@ -223,6 +295,7 @@ fn create_whitespace_cstring_with_len(len: usize) -> CString {
 
 pub struct Uniform{
     loc: gl::types::GLint,
+    cname: CString,
 }
 
 impl Uniform{
@@ -232,7 +305,17 @@ impl Uniform{
             gl::GetUniformLocation(program.id(), cname.as_bytes_with_nul().as_ptr() as *const i8)
         };
 
-        Self{ loc }
+        Self{
+            loc,
+            cname,
+        }
+    }
+
+    pub fn reload(&mut self, program: &Program){
+        let loc = unsafe {
+            gl::GetUniformLocation(program.id(), self.cname.as_bytes_with_nul().as_ptr() as *const i8)
+        };
+        self.loc = loc;
     }
 
     pub fn set_1f(&self, v: f32){ unsafe{ gl::Uniform1f(self.loc, v); } }

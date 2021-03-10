@@ -6,7 +6,7 @@ pub mod shader;
 
 use crate::shader::*;
 
-pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, builder: ShaderBuilder) {
+pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut builder: ShaderStreamer) {
     if cw <= 0 || ch <= 0 { panic!("cw or ch (canvas width or height) <= 0"); }
     if ww <= 0 || wh <= 0 { panic!("ww or wh (canvas width or height) <= 0"); }
 
@@ -24,15 +24,22 @@ pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, builder: ShaderBu
     #[allow(dead_code)]
     let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
     // build post vertex
-    let render_program = builder.build().unwrap_or_else(|e| panic!("{}", e));
+    let mut render_program = match builder.build(true){
+        Ok(program) => program,
+        Err(e) => {
+            println!("Frag: could not build program: {}", e);
+            Program::new(RENDER_VERT_SRC, &format!("{}{}", RENDER_FRAG_HEADER, RENDER_FRAG_STD_BODY))
+                .expect("Frag: could not create standard program.")
+        },
+    };
     let post_program = Program::new(POST_VERT_SRC, POST_FRAG_SRC).expect("Frag: could not create post program.");
     // set initial uniforms
     render_program.set_used();
-    let i_time = Uniform::new(&render_program, "iTime").with_1f(0.0);
-    let i_delta_time = Uniform::new(&render_program, "iDeltaTime").with_1f(0.0);
-    let i_frame = Uniform::new(&render_program, "iFrame").with_1ui(0);
-    let _i_aspect = Uniform::new(&render_program, "iAspect").with_1f(cw as f32 / ch as f32);
-    let _i_resolution = Uniform::new(&render_program, "iResolution").with_2f(cw as f32, ch as f32);
+    let mut i_time = Uniform::new(&render_program, "iTime").with_1f(0.0);
+    let mut i_delta_time = Uniform::new(&render_program, "iDeltaTime").with_1f(0.0);
+    let mut i_frame = Uniform::new(&render_program, "iFrame").with_1ui(0);
+    let mut i_aspect = Uniform::new(&render_program, "iAspect").with_1f(cw as f32 / ch as f32);
+    let mut i_resolution = Uniform::new(&render_program, "iResolution").with_2f(cw as f32, ch as f32);
     // initialize all geometry
     let vertices: Vec<f32> = vec![-1., -1., 0., -1., 1., 0., 1., 1., 0., -1., -1., 0., 1., 1., 0., 1., -1., 0.];
     let mut vbo: gl::types::GLuint = 0;
@@ -79,6 +86,7 @@ pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, builder: ShaderBu
     let mut dt = 0.0;
     let mut frame = 0;
     let mut event_pump = sdl_context.event_pump().unwrap();
+    builder.start();
     let start = Instant::now();
     'running: loop {
         let lt = t;
@@ -89,6 +97,27 @@ pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, builder: ShaderBu
                 _ => {}
             }
         }
+        // rebuild shader if needed
+        if builder.is_dirty(){
+            println!("Frag: rebuilding shader.");
+            match builder.build(false){
+                Ok(program) => {
+                    render_program = program;
+                    render_program.set_used();
+                    i_aspect.reload(&render_program);
+                    i_resolution.reload(&render_program);
+                    i_time.reload(&render_program);
+                    i_delta_time.reload(&render_program);
+                    i_frame.reload(&render_program);
+                    i_aspect.set_1f(cw as f32 / ch as f32);
+                    i_resolution.set_2f(cw as f32, ch as f32);
+                },
+                Err(e) => {
+                    println!("Frag: could not rebuild shader: {}", e);
+                },
+            }
+        }
+        // render
         unsafe{
             // render to texture
             gl::BindFramebuffer(gl::FRAMEBUFFER, canvas_fbo);
@@ -112,7 +141,7 @@ pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, builder: ShaderBu
         frame += 1;
         t = start.elapsed().as_millis() as f32 / 1000.0;
         dt = t - lt;
-        print!("{}, ", dt);
+        // print!("{}, ", dt);
     }
 
     unsafe{
