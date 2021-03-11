@@ -2,15 +2,25 @@ use frag::*;
 
 fn main(){
     let mul = 1;
-    let cw = 320*mul;
-    let ch = 180*mul;
-    let ww = 1600;
-    let wh = 900;
     println!("Henlo Frens!");
 
-    let builder = shader::ShaderStreamer::new()
+    let streamer = shader::ShaderStreamer::new()
         .with_file("lib.glsl")
         .with_file("shader.glsl");
-    //run(cw, ch, ww, wh, true, builder);
-    render(cw, ch, ww, wh, true, builder);
+    FragConf::new()
+        .with_window_width(1600)
+        .with_window_height(900)
+        .with_canvas_width(320 * mul)
+        .with_canvas_height(180 * mul)
+        .with_pixelate(true)
+        .with_streamer(streamer)
+        //.run_live().expect("Could not run.");
+        .into_ffmpeg_renderer()
+        .with_framerate(30)
+        .with_crf(20)
+        .with_preset(Preset::Slow)
+        .with_tune(Tune::Animation)
+        .with_length(60)
+        .with_output("render.mp4")
+        .render().expect("Could not render.");
 }

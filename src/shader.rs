@@ -63,11 +63,13 @@ void main()
     color = texture(tex, uv);
 }";
 
+#[derive(Debug)]
 enum StreamElement {
     Static(String),
     Streamed(String),
 }
 
+#[derive(Debug)]
 pub struct ShaderStreamer{
     segments: Vec<StreamElement>,
     hotwatch: Hotwatch,

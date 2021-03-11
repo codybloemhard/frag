@@ -2,17 +2,192 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::Instant;
 
-pub mod shader;
+use std::convert::TryInto;
+use std::io::prelude::*;
+use std::process::{ Command, Stdio };
+use std::ffi::c_void;
 
+pub mod shader;
 use crate::shader::*;
 
-pub fn render(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderStreamer) {
-    panic_on_dimensions(cw, ch, ww, wh);
+// General config rendering
+#[derive(Debug)]
+pub struct FragConf{
+    cw: i32,
+    ch: i32,
+    ww: i32,
+    wh: i32,
+    pixelate: bool,
+    streamer: Option<ShaderStreamer>,
+}
+// Config for rendering to file
+#[derive(Debug)]
+pub struct FFmpegConf{
+    base: FragConf,
+    framerate: u32,
+    preset: String,
+    tune: String,
+    crf: u32,
+    length: usize,
+    output: String,
+}
 
+#[derive(Debug)]
+pub enum Preset{
+    UltraFast, SuperFast, VeryFast, Faster, Fast, Medium, Slow, Slower, VerySlow
+}
+
+#[derive(Debug)]
+pub enum Tune{
+    Film, Animation, Grain, StillImage, FastDecode, ZeroLatency
+}
+
+impl FragConf{
+    pub fn new() -> Self{
+        Self{
+            cw: 0,
+            ch: 0,
+            ww: 0,
+            wh: 0,
+            pixelate: false,
+            streamer: None,
+        }
+    }
+
+    pub fn with_window_width(mut self, ww: u32) -> Self{
+        let ww = ww as i32;
+        if self.cw == 0 { self.cw = ww }
+        self.ww = ww;
+        self
+    }
+
+    pub fn with_window_height(mut self, wh: u32) -> Self{
+        let wh = wh as i32;
+        if self.ch == 0 { self.ch = wh }
+        self.wh = wh;
+        self
+    }
+
+    pub fn with_canvas_width(mut self, cw: u32) -> Self{
+        let cw = cw as i32;
+        if self.ww == 0 { self.ww = cw }
+        self.cw = cw;
+        self
+    }
+
+    pub fn with_canvas_height(mut self, ch: u32) -> Self{
+        let ch = ch as i32;
+        if self.wh == 0 { self.wh = ch }
+        self.ch = ch;
+        self
+    }
+
+    pub fn with_pixelate(mut self, pixelate: bool) -> Self{
+        self.pixelate = pixelate;
+        self
+    }
+
+    pub fn with_streamer(mut self, streamer: ShaderStreamer) -> Self{
+        self.streamer = Some(streamer);
+        self
+    }
+
+    pub fn into_ffmpeg_renderer(self) -> FFmpegConf{
+        FFmpegConf{
+            base: self,
+            framerate: 30,
+            crf: 20,
+            preset: String::from("medium"),
+            tune: String::from("film"),
+            length: 60,
+            output: String::from("output.mp4"),
+        }
+    }
+
+    pub fn run_live(self) -> Result<(), String>{
+        let streamer = if let Some(streamer) = self.streamer { streamer }
+        else {
+            println!("Frag: no streamer found, will use test streamer.");
+            ShaderStreamer::test()
+        };
+        run(self.cw, self.ch, self.ww, self.wh, self.pixelate, streamer);
+        Ok(())
+    }
+}
+
+impl Default for FragConf {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FFmpegConf{
+    pub fn with_framerate(mut self, fr: u32) -> Self{
+        self.framerate = fr;
+        self
+    }
+
+    pub fn with_crf(mut self, crf: u32) -> Self{
+        self.crf = crf.min(51);
+        self
+    }
+
+    pub fn with_preset(mut self, preset: Preset) -> Self{
+        self.preset = match preset{
+            Preset::UltraFast => "ultrafast",
+            Preset::SuperFast => "superfast",
+            Preset::VeryFast => "veryfast",
+            Preset::Faster => "faster",
+            Preset::Fast => "fast",
+            Preset::Medium => "medium",
+            Preset::Slow => "slow",
+            Preset::Slower => "slower",
+            Preset::VerySlow => "veryslow",
+        }.to_string();
+        self
+    }
+
+    pub fn with_tune(mut self, tune: Tune) -> Self{
+        self.tune = match tune{
+            Tune::Film => "film",
+            Tune::Animation => "animation",
+            Tune::Grain => "grain",
+            Tune::StillImage => "stillimage",
+            Tune::FastDecode => "fastdecode",
+            Tune::ZeroLatency => "zerolatency",
+        }.to_string();
+        self
+    }
+
+    pub fn with_length(mut self, frames: usize) -> Self{
+        self.length = frames;
+        self
+    }
+
+    pub fn with_output(mut self, filename: &str) -> Self{
+        self.output = filename.to_string();
+        self
+    }
+
+    pub fn render(mut self) -> Result<(), String>{
+        let streamer = if let Some(streamer) = self.base.streamer {
+            self.base.streamer = None;
+            streamer
+        }
+        else {
+            return Err("Frag: no streamer found.".to_string());
+        };
+        render(self, streamer);
+        Ok(())
+    }
+}
+
+fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) {
     let sdl_context = sdl2::init().expect("Frag: could not create SDL context.");
     let video_subsystem = sdl_context.video().expect("Frag: could not get SDL video subsystem.");
 
-    let window = video_subsystem.window(":3", ww as u32, wh as u32)
+    // window dimension must be the same or bigger as render dimensions, :/
+    let window = video_subsystem.window(":3", conf.base.ww as u32, conf.base.wh as u32)
         .position_centered().opengl().build().expect("Frag: could not create window.");
 
     let _gl_contex = window.gl_create_context().expect("Frag: could not create GL context."); //needs to exist
@@ -24,20 +199,20 @@ pub fn render(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: 
     let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
 
     let (mut render_program, post_program) = init_programs(&mut streamer);
-    let (i_time, i_delta_time, i_frame, _, _) = init_uniforms(&mut render_program, cw, ch);
+    let (i_time, i_delta_time, i_frame, _, _) = init_uniforms(&mut render_program, conf.base.cw, conf.base.ch);
     let vao = init_quad();
-    let (canvas_fbo, canvas_tex) = init_rendertarget(cw, ch, pixelate);
+    let (canvas_fbo, canvas_tex) = init_rendertarget(conf.base.cw, conf.base.ch, conf.base.pixelate);
 
-    let (mut t, mut dt, mut frame) = (0.0, 0.0, 0);
+    let (mut t, mut dt, mut frame) = (0.0, 0.0, 0usize);
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    use std::io::prelude::*;
-    use std::process::{ Command, Stdio };
-    // inspiration
+    // FFmpeg code adapted from:
     // http://blog.mmacklin.com/2013/06/11/real-time-video-capture-with-ffmpeg/
     let command = "ffmpeg";
-    let args = ["-r", "30", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "1600x900", "-i", "-", "-threads", "8",
-        "-preset", "veryslow", "-y", "-pix_fmt", "yuv420p", "-crf", "21", "-vf", "vflip", "output.mp4"];
+    let args = ["-r", &format!("{}", conf.framerate), "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &format!("{}x{}", conf.base.ww, conf.base.wh),
+        "-i", "-", "-threads", "0", "-preset", &conf.preset, "-tune", &conf.tune,
+        "-y", "-pix_fmt", "yuv420p", "-crf", &format!("{}", conf.crf),
+        "-vf", "vflip", &conf.output];
     let process = match Command::new(command)
         .args(&args)
         .stdin(Stdio::piped())
@@ -60,26 +235,25 @@ pub fn render(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: 
             // render to texture
             gl::BindFramebuffer(gl::FRAMEBUFFER, canvas_fbo);
             render_program.set_used();
-            gl::Viewport(0, 0, cw as i32, ch as i32);
+            gl::Viewport(0, 0, conf.base.cw, conf.base.ch);
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::BindVertexArray(vao);
             i_time.set_1f(t);
             i_delta_time.set_1f(dt);
-            i_frame.set_1ui(frame);
+            i_frame.set_1ui(frame.try_into().unwrap());
             gl::DrawArrays(gl::TRIANGLES, 0, 6);
             //render to screen
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
             post_program.set_used();
-            gl::Viewport(0, 0, ww, wh);
+            gl::Viewport(0, 0, conf.base.ww, conf.base.wh);
             gl::BindTexture(gl::TEXTURE_2D, canvas_tex);
             gl::DrawArrays(gl::TRIANGLES, 0, 6);
         }
 
-        let mut buffer: Vec<u8> = vec![0; (ww * wh) as usize * 4];
+        let mut buffer: Vec<u8> = vec![0; (conf.base.ww * conf.base.wh) as usize * 4];
 
-        use std::ffi::c_void;
         unsafe{
-            gl::ReadPixels(0, 0, ww, wh, gl::RGBA, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
+            gl::ReadPixels(0, 0, conf.base.ww, conf.base.wh, gl::RGBA, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
         }
 
         if let Err(why) = stdin.write_all(&buffer) {
@@ -87,10 +261,11 @@ pub fn render(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: 
         }
 
         frame += 1;
-        t += 1.0 / 30.0;
+        if frame > conf.length { break; }
+        t += 1.0 / conf.framerate as f32;
         dt = t - lt;
-        if frame > 60 { break; }
-        println!("{}, ", frame);
+        print!("{}, ", frame);
+        std::io::stdout().flush().expect("Frag: could not flush stdout.");
     }
 
     unsafe{
@@ -105,9 +280,8 @@ pub fn render(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: 
         Ok(_) => print!("ffmpeg responded with:\n{}", s),
     }
 }
-pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderStreamer) {
-    panic_on_dimensions(cw, ch, ww, wh);
 
+fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderStreamer) {
     let sdl_context = sdl2::init().expect("Frag: could not create SDL context.");
     let video_subsystem = sdl_context.video().expect("Frag: could not get SDL video subsystem.");
 
@@ -191,11 +365,6 @@ pub fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: Sha
     unsafe{
         gl::DeleteFramebuffers(1, &canvas_fbo);
     }
-}
-
-fn panic_on_dimensions(cw: i32, ch: i32, ww: i32, wh: i32) {
-    if cw <= 0 || ch <= 0 { panic!("cw or ch (canvas width or height) <= 0"); }
-    if ww <= 0 || wh <= 0 { panic!("ww or wh (canvas width or height) <= 0"); }
 }
 
 fn init_programs(streamer: &mut ShaderStreamer) -> (Program, Program){
