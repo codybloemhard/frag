@@ -110,8 +110,7 @@ impl FragConf{
             println!("Frag: no streamer found, will use test streamer.");
             ShaderStreamer::test()
         };
-        run(self.cw, self.ch, self.ww, self.wh, self.pixelate, streamer);
-        Ok(())
+        run(self.cw, self.ch, self.ww, self.wh, self.pixelate, streamer)
     }
 }
 
@@ -177,33 +176,40 @@ impl FFmpegConf{
         else {
             return Err("Frag: no streamer found.".to_string());
         };
-        render(self, streamer);
-        Ok(())
+        render(self, streamer)
     }
 }
 
-fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) {
-    let sdl_context = sdl2::init().expect("Frag: could not create SDL context.");
-    let video_subsystem = sdl_context.video().expect("Frag: could not get SDL video subsystem.");
+trait StringErr<U, V>{
+    fn strerr(self, msg: &str) -> Result<U, String>;
+    fn strerr_prop(self, f: &dyn Fn(V) -> String) -> Result<U, String>;
+}
 
-    // window dimension must be the same or bigger as render dimensions, :/
-    let window = video_subsystem.window(":3", conf.base.ww as u32, conf.base.wh as u32)
-        .position_centered().opengl().build().expect("Frag: could not create window.");
+impl<U, V> StringErr<U, V> for Result<U, V>{
+    fn strerr(self, msg: &str) -> Result<U, String>{
+        match self{
+            Err(_) => Err(msg.to_string()),
+            Ok(x) => Ok(x),
+        }
+    }
 
-    let _gl_contex = window.gl_create_context().expect("Frag: could not create GL context."); //needs to exist
-    let gl_attr = video_subsystem.gl_attr();
-    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-    gl_attr.set_context_version(4, 5);
+    fn strerr_prop(self, f: &dyn Fn(V) -> String) -> Result<U, String>{
+        match self{
+            Err(e) => Err(f(e)),
+            Ok(x) => Ok(x),
+        }
+    }
+}
 
-    #[allow(dead_code)]
-    let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
+fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> {
+    let (sdl_context, _window, _gl_contex, _) = init_context(conf.base.ww, conf.base.wh).strerr("Frag: could not create context.")?;
 
     let (mut render_program, post_program) = init_programs(&mut streamer);
     let (i_time, i_delta_time, i_frame, _, _) = init_uniforms(&mut render_program, conf.base.cw, conf.base.ch);
     let vao = init_quad();
-    let (canvas_fbo, canvas_tex) = init_rendertarget(conf.base.cw, conf.base.ch, conf.base.pixelate);
+    let (canvas_fbo, canvas_tex) = init_rendertarget(conf.base.cw, conf.base.ch, conf.base.pixelate)?;
 
-    let (mut t, mut dt, mut frame) = (0.0, 0.0, 0usize);
+    let (mut t, mut dt, mut frame, mut sec) = (0.0, 0.0, 0usize, 0.0);
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     // FFmpeg code adapted from:
@@ -213,17 +219,16 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) {
         "-i", "-", "-threads", "0", "-preset", &conf.preset, "-tune", &conf.tune,
         "-y", "-pix_fmt", "yuv420p", "-crf", &format!("{}", conf.crf),
         "-vf", "vflip", &conf.output];
-    let process = match Command::new(command)
+    let process = Command::new(command)
         .args(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn() {
-        Err(why) => panic!("couldn't spawn ffmpeg: {}", why),
-        Ok(process) => process,
-    };
+        .spawn()
+        .strerr_prop(&|e| format!("Frag: couldn't spawn ffmpeg: {}", e))?;
 
     let mut stdin = process.stdin.unwrap();
 
+    let start = Instant::now();
     'running: loop {
         let lt = t;
         for event in event_pump.poll_iter() {
@@ -242,12 +247,14 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) {
             i_delta_time.set_1f(dt);
             i_frame.set_1ui(frame.try_into().unwrap());
             gl::DrawArrays(gl::TRIANGLES, 0, 6);
-            //render to screen
-            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
-            post_program.set_used();
-            gl::Viewport(0, 0, conf.base.ww, conf.base.wh);
-            gl::BindTexture(gl::TEXTURE_2D, canvas_tex);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
+            //render to screen, skip if there is no scaling
+            if !(conf.base.ww == conf.base.cw && conf.base.wh == conf.base.ch){
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                post_program.set_used();
+                gl::Viewport(0, 0, conf.base.ww, conf.base.wh);
+                gl::BindTexture(gl::TEXTURE_2D, canvas_tex);
+                gl::DrawArrays(gl::TRIANGLES, 0, 6);
+            }
         }
 
         let mut buffer: Vec<u8> = vec![0; (conf.base.ww * conf.base.wh) as usize * 4];
@@ -256,16 +263,18 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) {
             gl::ReadPixels(0, 0, conf.base.ww, conf.base.wh, gl::RGBA, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
         }
 
-        if let Err(why) = stdin.write_all(&buffer) {
-            panic!("couldn't write to ffmpeg stdin: {}", why);
-        }
+        stdin.write_all(&buffer).strerr_prop(&|why| format!("Frag: couldn't write to ffmpeg stdin: {}", why))?;
 
         frame += 1;
         if frame > conf.length { break; }
         t += 1.0 / conf.framerate as f32;
+        let rt = start.elapsed().as_millis() as f32 / 1000.0;
         dt = t - lt;
-        print!("{}, ", frame);
-        std::io::stdout().flush().expect("Frag: could not flush stdout.");
+        if rt.floor() > sec{
+            sec = rt.floor();
+            println!("{} / {} frames", frame, conf.length);
+            std::io::stdout().flush().strerr("Frag: could not flush stdout.")?;
+        }
     }
 
     unsafe{
@@ -276,33 +285,22 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) {
 
     let mut s = String::new();
     match process.stdout.unwrap().read_to_string(&mut s) {
-        Err(why) => panic!("couldn't read ffmpeg stdout: {}", why),
-        Ok(_) => print!("ffmpeg responded with:\n{}", s),
+        Err(why) => println!("couldn't read ffmpeg stdout: {}", why),
+        Ok(_) => println!("ffmpeg responded with:\n{}", s),
     }
+    Ok(())
 }
 
-fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderStreamer) {
-    let sdl_context = sdl2::init().expect("Frag: could not create SDL context.");
-    let video_subsystem = sdl_context.video().expect("Frag: could not get SDL video subsystem.");
-
-    let gl_attr = video_subsystem.gl_attr();
-    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-    gl_attr.set_context_version(4, 5);
-
-    let window = video_subsystem.window(":3", ww as u32, wh as u32)
-        .position_centered().opengl().build().expect("Frag: could not create window.");
-
-    let _gl_contex = window.gl_create_context().expect("Frag: could not create GL context."); //needs to exist
-    #[allow(dead_code)]
-    let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
+fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderStreamer) -> Result<(), String>{
+    let (sdl_context, window, _gl_contex, _) = init_context(ww, wh).strerr("Frag: could not create context.")?;
 
     let (mut render_program, post_program) = init_programs(&mut streamer);
     let (mut i_time, mut i_delta_time, mut i_frame, mut i_aspect, mut i_resolution) = init_uniforms(&mut render_program, cw, ch);
     let vao = init_quad();
-    let (canvas_fbo, canvas_tex) = init_rendertarget(cw, ch, pixelate);
+    let (canvas_fbo, canvas_tex) = init_rendertarget(cw, ch, pixelate)?;
     // initialize render target
 
-    let (mut t, mut dt, mut frame) = (0.0, 0.0, 0);
+    let (mut t, mut dt, mut frame, mut sec, mut last_frames) = (0.0, 0.0, 0, 0.0, 0);
     let mut event_pump = sdl_context.event_pump().unwrap();
     streamer.start();
     let start = Instant::now();
@@ -359,12 +357,38 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
         frame += 1;
         t = start.elapsed().as_millis() as f32 / 1000.0;
         dt = t - lt;
-        // print!("{}, ", dt);
+        if t.floor() > sec{
+            print!("{}, ", frame - last_frames);
+            last_frames = frame;
+            sec = t.floor();
+            std::io::stdout().flush().strerr("Frag: could not flush stdout.")?;
+        }
     }
 
     unsafe{
         gl::DeleteFramebuffers(1, &canvas_fbo);
     }
+
+    Ok(())
+}
+
+fn init_context(ww: i32, wh: i32) -> Result<(sdl2::Sdl,sdl2::video::Window,sdl2::video::GLContext,()), String>{
+    let sdl_context = sdl2::init()?;//.expect("Frag: could not create SDL context.");
+    let video_subsystem = sdl_context.video()?;//.expect("Frag: could not get SDL video subsystem.");
+
+    // window dimension must be the same or bigger as render dimensions, :/
+    let window = video_subsystem.window(":3", ww as u32, wh as u32)
+        .position_centered().opengl().build().strerr("Frag: could not create window.")?;
+
+    let _gl_contex = window.gl_create_context().strerr("Frag: could not create GL context.")?; //needs to exist
+    let gl_attr = video_subsystem.gl_attr();
+    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+    gl_attr.set_context_version(4, 5);
+
+    #[allow(dead_code)]
+    let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
+
+    Ok((sdl_context, window, _gl_contex, _gl))
 }
 
 fn init_programs(streamer: &mut ShaderStreamer) -> (Program, Program){
@@ -416,7 +440,7 @@ fn init_quad() -> gl::types::GLuint{
     vao
 }
 
-fn init_rendertarget(cw: i32, ch: i32, pixelate: bool) -> (gl::types::GLuint, gl::types::GLuint){
+fn init_rendertarget(cw: i32, ch: i32, pixelate: bool) -> Result<(gl::types::GLuint, gl::types::GLuint), String>{
     let mut canvas_fbo: gl::types::GLuint = 0;
     let mut canvas_tex: gl::types::GLuint = 0;
 
@@ -433,11 +457,11 @@ fn init_rendertarget(cw: i32, ch: i32, pixelate: bool) -> (gl::types::GLuint, gl
 
         gl::FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, canvas_tex, 0);
         if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE{
-            panic!("Frag: could not initialize canvas framebuffer.");
+            return Err("Frag: could not initialize canvas framebuffer.".to_string());
         }
     }
 
-    (canvas_fbo, canvas_tex)
+    Ok((canvas_fbo, canvas_tex))
 }
 
 // OpenGl code stolen from these sources
