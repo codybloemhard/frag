@@ -11,5 +11,6 @@ fn main(){
     let builder = shader::ShaderStreamer::new()
         .with_file("lib.glsl")
         .with_file("shader.glsl");
-    run(cw, ch, ww, wh, true, builder);
+    //run(cw, ch, ww, wh, true, builder);
+    render(cw, ch, ww, wh, true, builder);
 }
