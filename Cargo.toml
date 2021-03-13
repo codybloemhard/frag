@@ -1,10 +1,10 @@
 [package]
 name = "frag"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Cody Bloemhard <cblmhrd@live.nl>"]
 edition = "2018"
 description = "A simple crate to do live shader coding and rendering shaders to video."
-license = "GPL3"
+license = "GPL-3.0-only"
 readme = "README.md"
 repository = "https://github.com/ocdy1001/frag"
 keywords = ["opengl", "shader", "fragment", "mp4", "rendering"]
@@ -24,3 +24,4 @@ path = "src/bin.rs"
 sdl2 = "0.34.3"
 gl = "0.14.0"
 hotwatch = "0.4.5"
+png = "0.16.8"

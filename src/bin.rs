@@ -14,13 +14,13 @@ fn main(){
         .with_canvas_height(180 * mul)
         .with_pixelate(true)
         .with_streamer(streamer)
-        // .run_live().expect("Could not run.");
-        .into_ffmpeg_renderer()
-        .with_framerate(30)
-        .with_crf(20)
-        .with_preset(Preset::Slow)
-        .with_tune(Tune::Animation)
-        .with_length(600)
-        .with_output("render.mp4")
-        .render().expect("Could not render.");
+        .run_live().expect("Could not run.");
+        // .into_ffmpeg_renderer()
+        // .with_framerate(30)
+        // .with_crf(20)
+        // .with_preset(Preset::Slow)
+        // .with_tune(Tune::Animation)
+        // .with_length(600)
+        // .with_output("render.mp4")
+        // .render().expect("Could not render.");
 }

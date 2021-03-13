@@ -1,11 +1,16 @@
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use std::time::Instant;
+use sdl2::keyboard::Scancode;
 
+use std::time::Instant;
 use std::convert::TryInto;
 use std::io::prelude::*;
 use std::process::{ Command, Stdio };
 use std::ffi::c_void;
+use std::path::Path;
+use std::fs::File;
+use std::io::BufWriter;
+use std::time::{ SystemTime, UNIX_EPOCH };
 
 pub mod shader;
 use crate::shader::*;
@@ -300,21 +305,70 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
     let (canvas_fbo, canvas_tex) = init_rendertarget(cw, ch, pixelate)?;
     // initialize render target
 
-    let (mut t, mut dt, mut frame, mut sec, mut last_frames) = (0.0, 0.0, 0, 0.0, 0);
+    let (mut t, mut dt, mut frame, mut sec, mut last_frames, mut play_t) = (0.0, 0.0, 0, 0.0, 0, 0.0);
     let mut event_pump = sdl_context.event_pump().unwrap();
     streamer.start();
     let start = Instant::now();
+    let mut playing = true;
+    let mut lt;
     'running: loop {
-        let lt = t;
+        lt = t;
+        let mut need_refresh = false;
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. }
                     => { break 'running  },
+                Event::KeyDown { keycode: Some(Keycode::Space), .. }
+                    => {
+                        playing = !playing;
+                        lt = start.elapsed().as_millis() as f32 / 1000.0;
+                    }
+                Event::KeyDown { keycode: Some(Keycode::Return), .. }
+                    => {
+                        let filename = match SystemTime::now().duration_since(UNIX_EPOCH){
+                            Ok(n) => format!("{}.png", n.as_secs()),
+                            Err(_) => "0.png".to_string(),
+                        };
+                        let path = Path::new(&filename);
+                        let file = File::create(path).expect("Frag: could not open file for frame image.");
+                        let w = &mut BufWriter::new(file);
+
+                        let mut encoder = png::Encoder::new(w, ww as u32, wh as u32);
+                        encoder.set_color(png::ColorType::RGBA);
+                        encoder.set_depth(png::BitDepth::Eight);
+                        let mut writer = encoder.write_header().expect("Frag: could not write png header for frame image.");
+
+                        let mut buffer: Vec<u8> = vec![0; (ww * wh) as usize * 4];
+                        unsafe{
+                            gl::ReadPixels(0, 0, ww, wh, gl::RGBA, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
+                        }
+
+                        if let Err(e) = writer.write_image_data(&buffer){
+                            println!("Frag: could not save frame image: {}", e);
+                        }
+                    },
+                Event::KeyDown { keycode: Some(Keycode::Down), .. }
+                    => {
+                        play_t = 0.0;
+                        lt = start.elapsed().as_millis() as f32 / 1000.0;
+                        need_refresh = true;
+                    }
                 _ => {}
             }
         }
+        need_refresh = need_refresh || if event_pump.keyboard_state().is_scancode_pressed(Scancode::Left){
+            play_t -= 1.0/30.0;
+            lt = start.elapsed().as_millis() as f32 / 1000.0;
+            true
+        } else if event_pump.keyboard_state().is_scancode_pressed(Scancode::Right){
+            play_t += if playing { 1.0 / 60.0 } else { 1.0 / 30.0 };
+            lt = start.elapsed().as_millis() as f32 / 1000.0;
+            true
+        }else {
+            false
+        };
         // rebuild shader if needed
-        if streamer.is_dirty(){
+        need_refresh = need_refresh || if streamer.is_dirty(){
             println!("Frag: rebuilding shader.");
             match streamer.build(false){
                 Ok(program) => {
@@ -327,41 +381,49 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
                     i_frame.reload(&render_program);
                     i_aspect.set_1f(cw as f32 / ch as f32);
                     i_resolution.set_2f(cw as f32, ch as f32);
+                    true
                 },
                 Err(e) => {
                     println!("Frag: could not rebuild shader: {}", e);
+                    false
                 },
             }
-        }
+        } else {
+            false
+        };
         // render
-        unsafe{
-            // render to texture
-            gl::BindFramebuffer(gl::FRAMEBUFFER, canvas_fbo);
-            render_program.set_used();
-            gl::Viewport(0, 0, cw as i32, ch as i32);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-            gl::BindVertexArray(vao);
-            i_time.set_1f(t);
-            i_delta_time.set_1f(dt);
-            i_frame.set_1ui(frame);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
-            //render to screen
-            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
-            post_program.set_used();
-            gl::Viewport(0, 0, ww, wh);
-            gl::BindTexture(gl::TEXTURE_2D, canvas_tex);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
-        }
-        window.gl_swap_window();
-
-        frame += 1;
-        t = start.elapsed().as_millis() as f32 / 1000.0;
-        dt = t - lt;
-        if t.floor() > sec{
-            print!("{}, ", frame - last_frames);
-            last_frames = frame;
-            sec = t.floor();
-            std::io::stdout().flush().strerr("Frag: could not flush stdout.")?;
+        if need_refresh || playing{
+            unsafe{
+                // render to texture
+                gl::BindFramebuffer(gl::FRAMEBUFFER, canvas_fbo);
+                render_program.set_used();
+                gl::Viewport(0, 0, cw as i32, ch as i32);
+                gl::Clear(gl::COLOR_BUFFER_BIT);
+                gl::BindVertexArray(vao);
+                i_time.set_1f(play_t);
+                i_delta_time.set_1f(dt);
+                i_frame.set_1ui(frame);
+                gl::DrawArrays(gl::TRIANGLES, 0, 6);
+                //render to screen
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                post_program.set_used();
+                gl::Viewport(0, 0, ww, wh);
+                gl::BindTexture(gl::TEXTURE_2D, canvas_tex);
+                gl::DrawArrays(gl::TRIANGLES, 0, 6);
+            }
+            window.gl_swap_window();
+            frame += 1;
+            if playing{
+                t = start.elapsed().as_millis() as f32 / 1000.0;
+                dt = t - lt;
+                play_t += dt;
+            }
+            if t.floor() > sec{
+                print!("{}, ", frame - last_frames);
+                last_frames = frame;
+                sec = t.floor();
+                std::io::stdout().flush().strerr("Frag: could not flush stdout.")?;
+            }
         }
     }
 
