@@ -14,6 +14,8 @@ Useful when for example, writing a raymarching shader.
 * Left(hold): go back in time
 * Right(hold): go forward in time
 * Down: set time to 0
+* PageDown: jump backward in time with 5 seconds
+* PageUp: jump forward in time with 5 seconds
 ## Todo
-* Documanation
+* Documentation
 * Post process fragment shader accessable

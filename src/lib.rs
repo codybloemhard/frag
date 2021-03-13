@@ -352,16 +352,28 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
                         play_t = 0.0;
                         lt = start.elapsed().as_millis() as f32 / 1000.0;
                         need_refresh = true;
-                    }
+                    },
+                Event::KeyDown { keycode: Some(Keycode::PageUp), .. }
+                    => {
+                        play_t += 5.0;
+                        lt = start.elapsed().as_millis() as f32 / 1000.0;
+                        need_refresh = true;
+                    },
+                Event::KeyDown { keycode: Some(Keycode::PageDown), .. }
+                    => {
+                        play_t -= 5.0;
+                        lt = start.elapsed().as_millis() as f32 / 1000.0;
+                        need_refresh = true;
+                    },
                 _ => {}
             }
         }
         need_refresh = need_refresh || if event_pump.keyboard_state().is_scancode_pressed(Scancode::Left){
-            play_t -= 1.0/30.0;
+            play_t -= if playing { 1.0 / 15.0 } else { 1.0 / 30.0 };
             lt = start.elapsed().as_millis() as f32 / 1000.0;
             true
         } else if event_pump.keyboard_state().is_scancode_pressed(Scancode::Right){
-            play_t += if playing { 1.0 / 60.0 } else { 1.0 / 30.0 };
+            play_t += 1.0 / 30.0;
             lt = start.elapsed().as_millis() as f32 / 1000.0;
             true
         }else {
