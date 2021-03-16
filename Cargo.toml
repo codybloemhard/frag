@@ -1,6 +1,6 @@
 [package]
 name = "frag"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Cody Bloemhard <cblmhrd@live.nl>"]
 edition = "2018"
 description = "A simple crate to do live shader coding and rendering shaders to video."

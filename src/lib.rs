@@ -334,16 +334,26 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
                         let w = &mut BufWriter::new(file);
 
                         let mut encoder = png::Encoder::new(w, ww as u32, wh as u32);
-                        encoder.set_color(png::ColorType::RGBA);
+                        encoder.set_color(png::ColorType::RGB);
                         encoder.set_depth(png::BitDepth::Eight);
                         let mut writer = encoder.write_header().expect("Frag: could not write png header for frame image.");
 
-                        let mut buffer: Vec<u8> = vec![0; (ww * wh) as usize * 4];
+                        let sw = ww as usize;
+                        let sh = wh as usize;
+                        let size = sw * sh;
+                        let mut buffer: Vec<u8> = vec![0; size * 3];
                         unsafe{
-                            gl::ReadPixels(0, 0, ww, wh, gl::RGBA, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
+                            gl::ReadPixels(0, 0, ww, wh, gl::RGB, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
+                        }
+                        // flip y
+                        let mut transformed = vec![0; size * 3];
+                        for y in 0..sh{
+                        for x in 0..sw * 3{
+                            transformed[(sh - y - 1) * sw * 3 + x] = buffer[y * sw * 3 + x];
+                        }
                         }
 
-                        if let Err(e) = writer.write_image_data(&buffer){
+                        if let Err(e) = writer.write_image_data(&transformed){
                             println!("Frag: could not save frame image: {}", e);
                         }
                     },
