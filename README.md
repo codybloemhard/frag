@@ -17,5 +17,4 @@ Useful when for example, writing a raymarching shader.
 * PageDown: jump backward in time with 5 seconds
 * PageUp: jump forward in time with 5 seconds
 ## Todo
-* Documentation
 * Post process fragment shader accessable

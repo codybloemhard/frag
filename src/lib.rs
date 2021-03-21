@@ -1,3 +1,39 @@
+/*!
+Example live coding, with pixel art like style:
+```
+use frag::*;
+let streamer = shader::ShaderStreamer::new()
+    .with_file("lib.glsl")
+    .with_file("shader.glsl");
+FragConf::new()
+    .with_window_width(1600)
+    .with_window_height(900)
+    .with_canvas_width(320)
+    .with_canvas_height(180)
+    .with_pixelate(true)
+    .with_streamer(streamer)
+    .run_live().expect("Could not run.");
+```
+Example rendering to video:
+```
+use frag::*;
+let streamer = shader::ShaderStreamer::new()
+    .with_file("lib.glsl")
+    .with_file("shader.glsl");
+FragConf::new()
+    .with_window_width(1600)
+    .with_window_height(900)
+    .with_streamer(streamer)
+    .into_ffmpeg_renderer()
+    .with_framerate(30)
+    .with_crf(20)
+    .with_preset(Preset::Slow)
+    .with_tune(Tune::Animation)
+    .with_length(600)
+    .with_output("render.mp4")
+    .render().expect("Could not render.");
+```
+!*/
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Scancode;
@@ -15,7 +51,8 @@ use std::time::{ SystemTime, UNIX_EPOCH };
 pub mod shader;
 use crate::shader::*;
 
-// General config rendering
+
+/// General config rendering
 #[derive(Debug)]
 pub struct FragConf{
     cw: i32,
@@ -25,7 +62,7 @@ pub struct FragConf{
     pixelate: bool,
     streamer: Option<ShaderStreamer>,
 }
-// Config for rendering to file
+/// Config for rendering to file
 #[derive(Debug)]
 pub struct FFmpegConf{
     base: FragConf,
@@ -36,18 +73,19 @@ pub struct FFmpegConf{
     length: usize,
     output: String,
 }
-
+/// FFMPEG presets
 #[derive(Debug)]
 pub enum Preset{
     UltraFast, SuperFast, VeryFast, Faster, Fast, Medium, Slow, Slower, VerySlow
 }
-
+/// FFMPEG Tunes
 #[derive(Debug)]
 pub enum Tune{
     Film, Animation, Grain, StillImage, FastDecode, ZeroLatency
 }
-
+/// Always start with a FragConf, can turn into other types of configs later
 impl FragConf{
+    /// Create default FragConf
     pub fn new() -> Self{
         Self{
             cw: 0,
@@ -58,45 +96,45 @@ impl FragConf{
             streamer: None,
         }
     }
-
+    /// Sets window width, if canvas width is not set it will set that to the same value
     pub fn with_window_width(mut self, ww: u32) -> Self{
         let ww = ww as i32;
         if self.cw == 0 { self.cw = ww }
         self.ww = ww;
         self
     }
-
+    /// Sets window height, if canvas height is not set it will set that to the same value
     pub fn with_window_height(mut self, wh: u32) -> Self{
         let wh = wh as i32;
         if self.ch == 0 { self.ch = wh }
         self.wh = wh;
         self
     }
-
+    /// Sets canvas width, if window width is not set it will set that to the same value
     pub fn with_canvas_width(mut self, cw: u32) -> Self{
         let cw = cw as i32;
         if self.ww == 0 { self.ww = cw }
         self.cw = cw;
         self
     }
-
+    /// Sets canvas height, if window height is not set it will set that to the same value
     pub fn with_canvas_height(mut self, ch: u32) -> Self{
         let ch = ch as i32;
         if self.wh == 0 { self.wh = ch }
         self.ch = ch;
         self
     }
-
+    /// Pixelate means upscaling without interpolation
     pub fn with_pixelate(mut self, pixelate: bool) -> Self{
         self.pixelate = pixelate;
         self
     }
-
+    /// Must provide a ShaderStreamer to render
     pub fn with_streamer(mut self, streamer: ShaderStreamer) -> Self{
         self.streamer = Some(streamer);
         self
     }
-
+    /// Turn into a FFmpegConf, use to render to a video
     pub fn into_ffmpeg_renderer(self) -> FFmpegConf{
         FFmpegConf{
             base: self,
@@ -108,7 +146,7 @@ impl FragConf{
             output: String::from("output.mp4"),
         }
     }
-
+    /// Render continously, will update when files are changed
     pub fn run_live(self) -> Result<(), String>{
         let streamer = if let Some(streamer) = self.streamer { streamer }
         else {
@@ -124,18 +162,19 @@ impl Default for FragConf {
         Self::new()
     }
 }
-
+/// Config for when you want to render to a video
 impl FFmpegConf{
+    /// Set framerate of the video
     pub fn with_framerate(mut self, fr: u32) -> Self{
         self.framerate = fr;
         self
     }
-
+    /// Sets FFMPEG CRF, range [0, 52). Higher is more lossy. Recommended range 17-21.
     pub fn with_crf(mut self, crf: u32) -> Self{
         self.crf = crf.min(51);
         self
     }
-
+    /// Sets FFMPEG preset
     pub fn with_preset(mut self, preset: Preset) -> Self{
         self.preset = match preset{
             Preset::UltraFast => "ultrafast",
@@ -150,7 +189,7 @@ impl FFmpegConf{
         }.to_string();
         self
     }
-
+    /// Sets FFMPEG tune
     pub fn with_tune(mut self, tune: Tune) -> Self{
         self.tune = match tune{
             Tune::Film => "film",
@@ -162,17 +201,17 @@ impl FFmpegConf{
         }.to_string();
         self
     }
-
+    /// Length in frames to be rended to video
     pub fn with_length(mut self, frames: usize) -> Self{
         self.length = frames;
         self
     }
-
+    /// Filename to be saved
     pub fn with_output(mut self, filename: &str) -> Self{
         self.output = filename.to_string();
         self
     }
-
+    /// Start rendering to video
     pub fn render(mut self) -> Result<(), String>{
         let streamer = if let Some(streamer) = self.base.streamer {
             self.base.streamer = None;
