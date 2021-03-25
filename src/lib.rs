@@ -71,6 +71,7 @@ pub struct FFmpegConf{
     tune: String,
     crf: u32,
     length: usize,
+    start: usize,
     output: String,
 }
 /// FFMPEG presets
@@ -143,6 +144,7 @@ impl FragConf{
             preset: String::from("medium"),
             tune: String::from("film"),
             length: 60,
+            start: 0,
             output: String::from("output.mp4"),
         }
     }
@@ -206,6 +208,11 @@ impl FFmpegConf{
         self.length = frames;
         self
     }
+    /// Start rendering from frame index
+    pub fn with_start(mut self, frame: usize) -> Self{
+        self.start = frame;
+        self
+    }
     /// Filename to be saved
     pub fn with_output(mut self, filename: &str) -> Self{
         self.output = filename.to_string();
@@ -253,7 +260,8 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> 
     let vao = init_quad();
     let (canvas_fbo, canvas_tex) = init_rendertarget(conf.base.cw, conf.base.ch, conf.base.pixelate)?;
 
-    let (mut t, mut dt, mut frame, mut sec) = (0.0, 0.0, 0usize, 0.0);
+    let frame_time = 1.0 / conf.framerate as f32;
+    let (mut t, mut dt, mut frame, mut sec) = (frame_time * conf.start as f32, 0.0, 0usize, 0.0);
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     // FFmpeg code adapted from:
@@ -311,7 +319,7 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> 
 
         frame += 1;
         if frame > conf.length { break; }
-        t += 1.0 / conf.framerate as f32;
+        t += frame_time;
         let rt = start.elapsed().as_millis() as f32 / 1000.0;
         dt = t - lt;
         if rt.floor() > sec{
