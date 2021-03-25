@@ -18,3 +18,38 @@ Useful when for example, writing a raymarching shader.
 * PageUp: jump forward in time with 5 seconds
 ## Todo
 * Post process fragment shader accessable
+## Examples
+### Example live coding, with pixel art like style
+```rust
+use frag::*;
+let streamer = shader::ShaderStreamer::new()
+    .with_file("lib.glsl")
+    .with_file("shader.glsl");
+FragConf::new()
+    .with_window_width(1600)
+    .with_window_height(900)
+    .with_canvas_width(320)
+    .with_canvas_height(180)
+    .with_pixelate(true)
+    .with_streamer(streamer)
+    .run_live().expect("Could not run.");
+```
+### Example rendering to video
+```rust
+use frag::*;
+let streamer = shader::ShaderStreamer::new()
+    .with_file("lib.glsl")
+    .with_file("shader.glsl");
+FragConf::new()
+    .with_window_width(1600)
+    .with_window_height(900)
+    .with_streamer(streamer)
+    .into_ffmpeg_renderer()
+    .with_framerate(30)
+    .with_crf(20)
+    .with_preset(Preset::Slow)
+    .with_tune(Tune::Animation)
+    .with_length(600)
+    .with_output("render.mp4")
+    .render().expect("Could not render.");
+```
