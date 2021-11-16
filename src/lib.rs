@@ -51,7 +51,6 @@ use std::time::{ SystemTime, UNIX_EPOCH };
 pub mod shader;
 use crate::shader::*;
 
-
 /// General config rendering
 #[derive(Debug)]
 pub struct FragConf{
@@ -310,7 +309,6 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> 
         }
 
         let mut buffer: Vec<u8> = vec![0; (conf.base.ww * conf.base.wh) as usize * 4];
-
         unsafe{
             gl::ReadPixels(0, 0, conf.base.ww, conf.base.wh, gl::RGBA, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
         }
@@ -527,21 +525,21 @@ fn init_programs(streamer: &mut ShaderStreamer) -> (Program, Program){
         Ok(program) => program,
         Err(e) => {
             println!("Frag: could not build program: {}", e);
-            Program::new(RENDER_VERT_SRC, &format!("{}{}", RENDER_FRAG_HEADER, RENDER_FRAG_STD_BODY))
+            Program::new(RENDER_VERT_SRC, &format!("{}{}", RENDER_FRAG_HEADER, RENDER_FRAG_STD_BODY), &[])
                 .expect("Frag: could not create standard program.")
         },
     };
-    let post_program = Program::new(POST_VERT_SRC, POST_FRAG_SRC).expect("Frag: could not create post program.");
+    let post_program = Program::new(POST_VERT_SRC, POST_FRAG_SRC, &[]).expect("Frag: could not create post program.");
     (render_program, post_program)
 }
 
 fn init_uniforms(render_program: &mut Program, cw: i32, ch: i32) -> (Uniform, Uniform, Uniform, Uniform, Uniform){
     render_program.set_used();
-    let i_time = Uniform::new(&render_program, "iTime").with_1f(0.0);
-    let i_delta_time = Uniform::new(&render_program, "iDeltaTime").with_1f(0.0);
-    let i_frame = Uniform::new(&render_program, "iFrame").with_1ui(0);
-    let i_aspect = Uniform::new(&render_program, "iAspect").with_1f(cw as f32 / ch as f32);
-    let i_resolution = Uniform::new(&render_program, "iResolution").with_2f(cw as f32, ch as f32);
+    let i_time = Uniform::new(render_program, "iTime").with_1f(0.0);
+    let i_delta_time = Uniform::new(render_program, "iDeltaTime").with_1f(0.0);
+    let i_frame = Uniform::new(render_program, "iFrame").with_1ui(0);
+    let i_aspect = Uniform::new(render_program, "iAspect").with_1f(cw as f32 / ch as f32);
+    let i_resolution = Uniform::new(render_program, "iResolution").with_2f(cw as f32, ch as f32);
     (i_time, i_delta_time, i_frame, i_aspect, i_resolution)
 }
 
