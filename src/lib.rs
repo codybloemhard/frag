@@ -379,7 +379,7 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
                         let w = &mut BufWriter::new(file);
 
                         let mut encoder = png::Encoder::new(w, ww as u32, wh as u32);
-                        encoder.set_color(png::ColorType::RGB);
+                        encoder.set_color(png::ColorType::Rgb);
                         encoder.set_depth(png::BitDepth::Eight);
                         let mut writer = encoder.write_header().expect("Frag: could not write png header for frame image.");
 
