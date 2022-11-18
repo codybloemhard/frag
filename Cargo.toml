@@ -1,12 +1,12 @@
 [package]
 name = "frag"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Cody Bloemhard <codybloemhard@gmail.com>"]
 edition = "2018"
 description = "A simple crate to do live shader coding and rendering shaders to video."
 license = "GPL-3.0-only"
 readme = "README.md"
-repository = "https://github.com/codybloemhard/frag"
+repository = "https://gitlab.com/codybloemhard/frag"
 keywords = ["opengl", "shader", "fragment", "mp4", "rendering"]
 categories = ["graphics"]
 
