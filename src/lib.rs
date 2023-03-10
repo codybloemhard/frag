@@ -271,7 +271,7 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> 
         "-y", "-pix_fmt", "yuv420p", "-crf", &format!("{}", conf.crf),
         "-vf", "vflip", &conf.output];
     let process = Command::new(command)
-        .args(&args)
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -464,7 +464,7 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
                 // render to texture
                 gl::BindFramebuffer(gl::FRAMEBUFFER, canvas_fbo);
                 render_program.set_used();
-                gl::Viewport(0, 0, cw as i32, ch as i32);
+                gl::Viewport(0, 0, cw, ch);
                 gl::Clear(gl::COLOR_BUFFER_BIT);
                 gl::BindVertexArray(vao);
                 i_time.set_1f(play_t);
