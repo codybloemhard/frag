@@ -34,19 +34,24 @@ FragConf::new()
     .render().expect("Could not render.");
 ```
 !*/
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::keyboard::Scancode;
 
-use std::time::Instant;
-use std::convert::TryInto;
-use std::io::prelude::*;
-use std::process::{ Command, Stdio };
-use std::ffi::c_void;
-use std::path::Path;
-use std::fs::File;
-use std::io::BufWriter;
-use std::time::{ SystemTime, UNIX_EPOCH };
+use sdl2::{
+    event::Event,
+    keyboard::Keycode,
+    keyboard::Scancode,
+};
+
+use std::{
+    time::Instant,
+    convert::TryInto,
+    io::prelude::*,
+    process::{ Command, Stdio },
+    ffi::c_void,
+    path::Path,
+    fs::File,
+    io::BufWriter,
+    time::{ SystemTime, UNIX_EPOCH },
+};
 
 pub mod shader;
 use crate::shader::*;
@@ -61,6 +66,7 @@ pub struct FragConf{
     pixelate: bool,
     streamer: Option<ShaderStreamer>,
 }
+
 /// Config for rendering to file
 #[derive(Debug)]
 pub struct FFmpegConf{
@@ -73,16 +79,19 @@ pub struct FFmpegConf{
     start: usize,
     output: String,
 }
+
 /// FFMPEG presets
 #[derive(Debug)]
 pub enum Preset{
     UltraFast, SuperFast, VeryFast, Faster, Fast, Medium, Slow, Slower, VerySlow
 }
+
 /// FFMPEG Tunes
 #[derive(Debug)]
 pub enum Tune{
     Film, Animation, Grain, StillImage, FastDecode, ZeroLatency
 }
+
 /// Always start with a FragConf, can turn into other types of configs later
 impl FragConf{
     /// Create default FragConf
@@ -96,6 +105,7 @@ impl FragConf{
             streamer: None,
         }
     }
+
     /// Sets window width, if canvas width is not set it will set that to the same value
     pub fn with_window_width(mut self, ww: u32) -> Self{
         let ww = ww as i32;
@@ -103,6 +113,7 @@ impl FragConf{
         self.ww = ww;
         self
     }
+
     /// Sets window height, if canvas height is not set it will set that to the same value
     pub fn with_window_height(mut self, wh: u32) -> Self{
         let wh = wh as i32;
@@ -110,6 +121,7 @@ impl FragConf{
         self.wh = wh;
         self
     }
+
     /// Sets canvas width, if window width is not set it will set that to the same value
     pub fn with_canvas_width(mut self, cw: u32) -> Self{
         let cw = cw as i32;
@@ -117,6 +129,7 @@ impl FragConf{
         self.cw = cw;
         self
     }
+
     /// Sets canvas height, if window height is not set it will set that to the same value
     pub fn with_canvas_height(mut self, ch: u32) -> Self{
         let ch = ch as i32;
@@ -124,16 +137,19 @@ impl FragConf{
         self.ch = ch;
         self
     }
+
     /// Pixelate means upscaling without interpolation
     pub fn with_pixelate(mut self, pixelate: bool) -> Self{
         self.pixelate = pixelate;
         self
     }
+
     /// Must provide a ShaderStreamer to render
     pub fn with_streamer(mut self, streamer: ShaderStreamer) -> Self{
         self.streamer = Some(streamer);
         self
     }
+
     /// Turn into a FFmpegConf, use to render to a video
     pub fn into_ffmpeg_renderer(self) -> FFmpegConf{
         FFmpegConf{
@@ -147,6 +163,7 @@ impl FragConf{
             output: String::from("output.mp4"),
         }
     }
+
     /// Render continously, will update when files are changed
     pub fn run_live(self) -> Result<(), String>{
         let streamer = if let Some(streamer) = self.streamer { streamer }
@@ -163,6 +180,7 @@ impl Default for FragConf {
         Self::new()
     }
 }
+
 /// Config for when you want to render to a video
 impl FFmpegConf{
     /// Set framerate of the video
@@ -170,11 +188,13 @@ impl FFmpegConf{
         self.framerate = fr;
         self
     }
+
     /// Sets FFMPEG CRF, range [0, 52). Higher is more lossy. Recommended range 17-21.
     pub fn with_crf(mut self, crf: u32) -> Self{
         self.crf = crf.min(51);
         self
     }
+
     /// Sets FFMPEG preset
     pub fn with_preset(mut self, preset: Preset) -> Self{
         self.preset = match preset{
@@ -190,6 +210,7 @@ impl FFmpegConf{
         }.to_string();
         self
     }
+
     /// Sets FFMPEG tune
     pub fn with_tune(mut self, tune: Tune) -> Self{
         self.tune = match tune{
@@ -202,21 +223,25 @@ impl FFmpegConf{
         }.to_string();
         self
     }
+
     /// Length in frames to be rended to video
     pub fn with_length(mut self, frames: usize) -> Self{
         self.length = frames;
         self
     }
+
     /// Start rendering from frame index
     pub fn with_start(mut self, frame: usize) -> Self{
         self.start = frame;
         self
     }
+
     /// Filename to be saved
     pub fn with_output(mut self, filename: &str) -> Self{
         self.output = filename.to_string();
         self
     }
+
     /// Start rendering to video
     pub fn render(mut self) -> Result<(), String>{
         let streamer = if let Some(streamer) = self.base.streamer {
@@ -252,12 +277,15 @@ impl<U, V> StringErr<U, V> for Result<U, V>{
 }
 
 fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> {
-    let (sdl_context, _window, _gl_contex, _) = init_context(conf.base.ww, conf.base.wh).strerr("Frag: could not create context.")?;
+    let (sdl_context, _window, _gl_contex)
+        = init_context(conf.base.ww, conf.base.wh).strerr("Frag: could not create context.")?;
 
     let (mut render_program, post_program) = init_programs(&mut streamer);
-    let (i_time, i_delta_time, i_frame, _, _) = init_uniforms(&mut render_program, conf.base.cw, conf.base.ch);
+    let (i_time, i_delta_time, i_frame, _, _)
+        = init_uniforms(&mut render_program, conf.base.cw, conf.base.ch);
     let vao = init_quad();
-    let (canvas_fbo, canvas_tex) = init_rendertarget(conf.base.cw, conf.base.ch, conf.base.pixelate)?;
+    let (canvas_fbo, canvas_tex)
+        = init_rendertarget(conf.base.cw, conf.base.ch, conf.base.pixelate)?;
 
     let frame_time = 1.0 / conf.framerate as f32;
     let (mut t, mut dt, mut frame, mut sec) = (frame_time * conf.start as f32, 0.0, 0usize, 0.0);
@@ -266,10 +294,15 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> 
     // FFmpeg code adapted from:
     // http://blog.mmacklin.com/2013/06/11/real-time-video-capture-with-ffmpeg/
     let command = "ffmpeg";
-    let args = ["-r", &format!("{}", conf.framerate), "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &format!("{}x{}", conf.base.ww, conf.base.wh),
+    let args = [
+        "-r", &format!("{}", conf.framerate),
+        "-f", "rawvideo", "-pix_fmt", "rgba",
+        "-s", &format!("{}x{}", conf.base.ww, conf.base.wh),
         "-i", "-", "-threads", "0", "-preset", &conf.preset, "-tune", &conf.tune,
         "-y", "-pix_fmt", "yuv420p", "-crf", &format!("{}", conf.crf),
-        "-vf", "vflip", &conf.output];
+        "-vf", "vflip",
+        &conf.output
+    ];
     let process = Command::new(command)
         .args(args)
         .stdin(Stdio::piped())
@@ -310,10 +343,16 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> 
 
         let mut buffer: Vec<u8> = vec![0; (conf.base.ww * conf.base.wh) as usize * 4];
         unsafe{
-            gl::ReadPixels(0, 0, conf.base.ww, conf.base.wh, gl::RGBA, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
+            gl::ReadPixels(
+                0, 0, conf.base.ww, conf.base.wh,
+                gl::RGBA, gl::UNSIGNED_BYTE,
+                buffer.as_mut_ptr() as *mut c_void
+            );
         }
 
-        stdin.write_all(&buffer).strerr_prop(&|why| format!("Frag: couldn't write to ffmpeg stdin: {}", why))?;
+        stdin
+            .write_all(&buffer)
+            .strerr_prop(&|why| format!("Frag: couldn't write to ffmpeg stdin: {}", why))?;
 
         frame += 1;
         if frame > conf.length { break; }
@@ -341,16 +380,19 @@ fn render(conf: FFmpegConf, mut streamer: ShaderStreamer) -> Result<(), String> 
     Ok(())
 }
 
-fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderStreamer) -> Result<(), String>{
-    let (sdl_context, window, _gl_contex, _) = init_context(ww, wh).strerr("Frag: could not create context.")?;
-
+fn run(
+    cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderStreamer
+) -> Result<(), String>{
+    let (sdl_context, window, _gl_contex)
+        = init_context(ww, wh).strerr("Frag: could not create context.")?;
     let (mut render_program, post_program) = init_programs(&mut streamer);
-    let (mut i_time, mut i_delta_time, mut i_frame, mut i_aspect, mut i_resolution) = init_uniforms(&mut render_program, cw, ch);
+    let (mut i_time, mut i_delta_time, mut i_frame, mut i_aspect, mut i_resolution)
+        = init_uniforms(&mut render_program, cw, ch);
     let vao = init_quad();
     let (canvas_fbo, canvas_tex) = init_rendertarget(cw, ch, pixelate)?;
-    // initialize render target
 
-    let (mut t, mut dt, mut frame, mut sec, mut last_frames, mut play_t) = (0.0, 0.0, 0, 0.0, 0, 0.0);
+    let (mut t, mut dt, mut frame, mut sec, mut last_frames, mut play_t)
+        = (0.0, 0.0, 0, 0.0, 0, 0.0);
     let mut event_pump = sdl_context.event_pump().unwrap();
     streamer.start();
     let start = Instant::now();
@@ -361,69 +403,72 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
         let mut need_refresh = false;
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. }
-                    => { break 'running  },
-                Event::KeyDown { keycode: Some(Keycode::Space), .. }
-                    => {
-                        playing = !playing;
-                        lt = start.elapsed().as_millis() as f32 / 1000.0;
+                Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running
+                },
+                Event::KeyDown { keycode: Some(Keycode::Space), .. } => {
+                    playing = !playing;
+                    lt = start.elapsed().as_millis() as f32 / 1000.0;
+                }
+                Event::KeyDown { keycode: Some(Keycode::Return), .. } => {
+                    let filename = match SystemTime::now().duration_since(UNIX_EPOCH){
+                        Ok(n) => format!("{}.png", n.as_secs()),
+                        Err(_) => "0.png".to_string(),
+                    };
+                    let path = Path::new(&filename);
+                    let file = File::create(path)
+                        .expect("Frag: could not open file for frame image.");
+                    let w = &mut BufWriter::new(file);
+
+                    let mut encoder = png::Encoder::new(w, ww as u32, wh as u32);
+                    encoder.set_color(png::ColorType::Rgb);
+                    encoder.set_depth(png::BitDepth::Eight);
+                    let mut writer = encoder.write_header()
+                        .expect("Frag: could not write png header for frame image.");
+
+                    let sw = ww as usize;
+                    let sh = wh as usize;
+                    let size = sw * sh;
+                    let mut buffer: Vec<u8> = vec![0; size * 3];
+                    unsafe{
+                        gl::ReadPixels(
+                            0, 0, ww, wh,
+                            gl::RGB, gl::UNSIGNED_BYTE,
+                            buffer.as_mut_ptr() as *mut c_void
+                        );
                     }
-                Event::KeyDown { keycode: Some(Keycode::Return), .. }
-                    => {
-                        let filename = match SystemTime::now().duration_since(UNIX_EPOCH){
-                            Ok(n) => format!("{}.png", n.as_secs()),
-                            Err(_) => "0.png".to_string(),
-                        };
-                        let path = Path::new(&filename);
-                        let file = File::create(path).expect("Frag: could not open file for frame image.");
-                        let w = &mut BufWriter::new(file);
+                    // flip y
+                    let mut transformed = vec![0; size * 3];
+                    for y in 0..sh{
+                    for x in 0..sw * 3{
+                        transformed[(sh - y - 1) * sw * 3 + x] = buffer[y * sw * 3 + x];
+                    }
+                    }
 
-                        let mut encoder = png::Encoder::new(w, ww as u32, wh as u32);
-                        encoder.set_color(png::ColorType::Rgb);
-                        encoder.set_depth(png::BitDepth::Eight);
-                        let mut writer = encoder.write_header().expect("Frag: could not write png header for frame image.");
-
-                        let sw = ww as usize;
-                        let sh = wh as usize;
-                        let size = sw * sh;
-                        let mut buffer: Vec<u8> = vec![0; size * 3];
-                        unsafe{
-                            gl::ReadPixels(0, 0, ww, wh, gl::RGB, gl::UNSIGNED_BYTE, buffer.as_mut_ptr() as *mut c_void);
-                        }
-                        // flip y
-                        let mut transformed = vec![0; size * 3];
-                        for y in 0..sh{
-                        for x in 0..sw * 3{
-                            transformed[(sh - y - 1) * sw * 3 + x] = buffer[y * sw * 3 + x];
-                        }
-                        }
-
-                        if let Err(e) = writer.write_image_data(&transformed){
-                            println!("Frag: could not save frame image: {}", e);
-                        }
-                    },
-                Event::KeyDown { keycode: Some(Keycode::Down), .. }
-                    => {
-                        play_t = 0.0;
-                        lt = start.elapsed().as_millis() as f32 / 1000.0;
-                        need_refresh = true;
-                    },
-                Event::KeyDown { keycode: Some(Keycode::PageUp), .. }
-                    => {
-                        play_t += 5.0;
-                        lt = start.elapsed().as_millis() as f32 / 1000.0;
-                        need_refresh = true;
-                    },
-                Event::KeyDown { keycode: Some(Keycode::PageDown), .. }
-                    => {
-                        play_t -= 5.0;
-                        lt = start.elapsed().as_millis() as f32 / 1000.0;
-                        need_refresh = true;
-                    },
+                    if let Err(e) = writer.write_image_data(&transformed){
+                        println!("Frag: could not save frame image: {}", e);
+                    }
+                },
+                Event::KeyDown { keycode: Some(Keycode::Down), .. } => {
+                    play_t = 0.0;
+                    lt = start.elapsed().as_millis() as f32 / 1000.0;
+                    need_refresh = true;
+                },
+                Event::KeyDown { keycode: Some(Keycode::PageUp), .. } => {
+                    play_t += 5.0;
+                    lt = start.elapsed().as_millis() as f32 / 1000.0;
+                    need_refresh = true;
+                },
+                Event::KeyDown { keycode: Some(Keycode::PageDown), .. } => {
+                    play_t -= 5.0;
+                    lt = start.elapsed().as_millis() as f32 / 1000.0;
+                    need_refresh = true;
+                },
                 _ => {}
             }
         }
-        need_refresh = need_refresh || if event_pump.keyboard_state().is_scancode_pressed(Scancode::Left){
+        need_refresh = need_refresh ||
+        if event_pump.keyboard_state().is_scancode_pressed(Scancode::Left){
             play_t -= if playing { 1.0 / 15.0 } else { 1.0 / 30.0 };
             lt = start.elapsed().as_millis() as f32 / 1000.0;
             true
@@ -501,7 +546,9 @@ fn run(cw: i32, ch: i32, ww: i32, wh: i32, pixelate: bool, mut streamer: ShaderS
     Ok(())
 }
 
-fn init_context(ww: i32, wh: i32) -> Result<(sdl2::Sdl,sdl2::video::Window,sdl2::video::GLContext,()), String>{
+fn init_context(ww: i32, wh: i32)
+    -> Result<(sdl2::Sdl,sdl2::video::Window,sdl2::video::GLContext), String>
+{
     let sdl_context = sdl2::init()?;//.expect("Frag: could not create SDL context.");
     let video_subsystem = sdl_context.video()?;//.expect("Frag: could not get SDL video subsystem.");
 
@@ -509,15 +556,16 @@ fn init_context(ww: i32, wh: i32) -> Result<(sdl2::Sdl,sdl2::video::Window,sdl2:
     let window = video_subsystem.window(":3", ww as u32, wh as u32)
         .position_centered().opengl().build().strerr("Frag: could not create window.")?;
 
-    let _gl_contex = window.gl_create_context().strerr("Frag: could not create GL context.")?; //needs to exist
+    //needs to exist
+    let _gl_contex = window.gl_create_context().strerr("Frag: could not create GL context.")?;
+
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(4, 5);
 
-    #[allow(dead_code)]
-    let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
+    gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
 
-    Ok((sdl_context, window, _gl_contex, _gl))
+    Ok((sdl_context, window, _gl_contex))
 }
 
 fn init_programs(streamer: &mut ShaderStreamer) -> (Program, Program){
@@ -525,15 +573,20 @@ fn init_programs(streamer: &mut ShaderStreamer) -> (Program, Program){
         Ok(program) => program,
         Err(e) => {
             println!("Frag: could not build program: {}", e);
-            Program::new(RENDER_VERT_SRC, &format!("{}{}", RENDER_FRAG_HEADER, RENDER_FRAG_STD_BODY), &[])
-                .expect("Frag: could not create standard program.")
+            Program::new(
+                RENDER_VERT_SRC,
+                &format!("{}{}", RENDER_FRAG_HEADER, RENDER_FRAG_STD_BODY), &[]
+            ).expect("Frag: could not create standard program.")
         },
     };
-    let post_program = Program::new(POST_VERT_SRC, POST_FRAG_SRC, &[]).expect("Frag: could not create post program.");
+    let post_program = Program::new(POST_VERT_SRC, POST_FRAG_SRC, &[])
+        .expect("Frag: could not create post program.");
     (render_program, post_program)
 }
 
-fn init_uniforms(render_program: &mut Program, cw: i32, ch: i32) -> (Uniform, Uniform, Uniform, Uniform, Uniform){
+fn init_uniforms(render_program: &mut Program, cw: i32, ch: i32)
+    -> (Uniform, Uniform, Uniform, Uniform, Uniform)
+{
     render_program.set_used();
     let i_time = Uniform::new(render_program, "iTime").with_1f(0.0);
     let i_delta_time = Uniform::new(render_program, "iDeltaTime").with_1f(0.0);
@@ -544,7 +597,9 @@ fn init_uniforms(render_program: &mut Program, cw: i32, ch: i32) -> (Uniform, Un
 }
 
 fn init_quad() -> gl::types::GLuint{
-    let vertices: Vec<f32> = vec![-1., -1., 0., -1., 1., 0., 1., 1., 0., -1., -1., 0., 1., 1., 0., 1., -1., 0.];
+    let vertices: Vec<f32> = vec![
+        -1., -1., 0., -1., 1., 0., 1., 1., 0., -1., -1., 0., 1., 1., 0., 1., -1., 0.
+    ];
     let mut vbo: gl::types::GLuint = 0;
     let mut vao: gl::types::GLuint = 0;
 
@@ -553,7 +608,8 @@ fn init_quad() -> gl::types::GLuint{
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
             gl::ARRAY_BUFFER, // target
-            (vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr, // size of data in bytes
+            // size of data in bytes
+            (vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
             vertices.as_ptr() as *const gl::types::GLvoid, // pointer to data
             gl::STATIC_DRAW // usage
         );
@@ -562,14 +618,20 @@ fn init_quad() -> gl::types::GLuint{
         gl::BindVertexArray(vao);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, (3 * std::mem::size_of::<f32>()) as gl::types::GLint, std::ptr::null());
+        gl::VertexAttribPointer(
+            0, 3,
+            gl::FLOAT, gl::FALSE,
+            (3 * std::mem::size_of::<f32>()) as gl::types::GLint, std::ptr::null()
+        );
         gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         gl::BindVertexArray(0);
     }
     vao
 }
 
-fn init_rendertarget(cw: i32, ch: i32, pixelate: bool) -> Result<(gl::types::GLuint, gl::types::GLuint), String>{
+fn init_rendertarget(cw: i32, ch: i32, pixelate: bool)
+    -> Result<(gl::types::GLuint, gl::types::GLuint), String>
+{
     let mut canvas_fbo: gl::types::GLuint = 0;
     let mut canvas_tex: gl::types::GLuint = 0;
 
@@ -579,12 +641,17 @@ fn init_rendertarget(cw: i32, ch: i32, pixelate: bool) -> Result<(gl::types::GLu
         gl::GenTextures(1, &mut canvas_tex);
         gl::BindTexture(gl::TEXTURE_2D, canvas_tex);
 
-        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGB as i32, cw, ch, 0, gl::RGB, gl::UNSIGNED_BYTE, std::ptr::null());
+        gl::TexImage2D(
+            gl::TEXTURE_2D, 0, gl::RGB as i32, cw, ch, 0,
+            gl::RGB, gl::UNSIGNED_BYTE, std::ptr::null()
+        );
         let filter = if pixelate { gl::NEAREST } else { gl::LINEAR } as i32;
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, filter);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, filter);
 
-        gl::FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, canvas_tex, 0);
+        gl::FramebufferTexture2D(
+            gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, canvas_tex, 0
+        );
         if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE{
             return Err("Frag: could not initialize canvas framebuffer.".to_string());
         }

@@ -121,8 +121,8 @@ impl ShaderStreamer{
         for element in &self.segments{
             if let StreamElement::Streamed(file) = element{
                 self.hotwatch.watch(file, move |event: Event| {
-                    if let Event::Write(path) = event {
-                        println!("Frag: marked \"{:?}\" dirty.", path.to_str());
+                    if let hotwatch::EventKind::Modify(_) = event.kind {
+                        println!("Frag: marked {:?} dirty.", event.paths);
                         let flag = 1u32 << stream_count;
                         STREAM_FLAG.fetch_or(flag, Ordering::SeqCst);
                     }

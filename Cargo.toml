@@ -1,12 +1,12 @@
 [package]
 name = "frag"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Cody Bloemhard <codybloemhard@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "A simple crate to do live shader coding and rendering shaders to video."
 license = "GPL-3.0-only"
 readme = "README.md"
-repository = "https://gitlab.com/codybloemhard/frag"
+repository = "https://github.com/codybloemhard/frag"
 keywords = ["opengl", "shader", "fragment", "mp4", "rendering"]
 categories = ["graphics"]
 
@@ -21,7 +21,7 @@ name = "testbin"
 path = "src/bin.rs"
 
 [dependencies]
-sdl2 = "0.34.3"
+sdl2 = "0.36.0"
 gl = "0.14.0"
-hotwatch = "0.4.5"
-png = "0.17.2"
+hotwatch = "0.5.0"
+png = "0.17.13"
